@@ -124,7 +124,7 @@ const restaurantItem = (props) => {
     <li class="restaurant">
       <div class="restaurant__category">
         <img
-          src="../../public/category-${category}.png"
+          src="/src/assets/category-${category}.png"
           alt="${categoryAlt}"
           class="category-icon"
         />
