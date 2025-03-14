@@ -253,22 +253,23 @@ function useTab(initialTab) {
   };
   return [tab, setTabAll, setTabFavorite];
 }
-function NavTab({ onTabChange }) {
+const useTabChange = () => {
   const [tab, setTabAll, setTabFavorite] = useTab(TAB.ALL);
   const handleTabChange = (newTab) => {
-    if (newTab === TAB.ALL) {
-      setTabAll();
-    } else {
-      setTabFavorite();
-    }
-    onTabChange(newTab);
+    newTab === TAB.ALL ? setTabAll() : setTabFavorite();
   };
+  return { tab, handleTabChange };
+};
+function NavTab({ setCurrentTab }) {
+  const { tab, handleTabChange } = useTabChange();
   const eventManager = new EventManager($("#app"));
   eventManager.addEvent("click", "#nav-tab-1", () => {
     handleTabChange(TAB.ALL);
+    setCurrentTab(TAB.ALL);
   });
   eventManager.addEvent("click", "#nav-tab-2", () => {
     handleTabChange(TAB.FAVORITE);
+    setCurrentTab(TAB.FAVORITE);
   });
   return `
     <nav class="nav-tab">
@@ -333,6 +334,20 @@ const ICON_IMAGES = {
   FAVORITE: "./Ic_favorite_filled.png",
   UNFAVORITE: "./Ic_favorite_lined.png"
 };
+const useFavorite = () => {
+  const handleFavoriteToggle = (name, favorite, setFavorite) => {
+    const storedRestaurants = getStorage() || [];
+    const newFavoriteState = !favorite;
+    const updatedRestaurants = storedRestaurants.map(
+      (restaurant) => restaurant.name === name ? { ...restaurant, isFavorite: newFavoriteState } : restaurant
+    );
+    saveStorage(updatedRestaurants);
+    setFavorite(newFavoriteState);
+  };
+  return {
+    handleFavoriteToggle
+  };
+};
 const BottomSheet = (props) => {
   const {
     category,
@@ -343,7 +358,8 @@ const BottomSheet = (props) => {
     favorite,
     onClose,
     handleFavoriteToggle,
-    buttonId
+    buttonId,
+    setFavorite
   } = props;
   const eventManager = new EventManager($("#app"));
   eventManager.addEvent("click", ".modal-backdrop", () => {
@@ -369,7 +385,7 @@ const BottomSheet = (props) => {
     }
   );
   eventManager.addEvent("click", `#${buttonId}`, () => {
-    handleFavoriteToggle();
+    handleFavoriteToggle(name, favorite, setFavorite);
   });
   return `
     <div class="modal modal--open">
@@ -435,22 +451,15 @@ const Restaurant = (props) => {
   const { category, name, distance, description, link } = props;
   const [favorite, setFavorite] = useState(false);
   const [isModalOpen, openModal, closeModal] = useModal(false);
+  const { handleFavoriteToggle } = useFavorite();
   const eventManager = new EventManager($("#app"));
   const buttonId = `favorite-${crypto.randomUUID()}`;
   const restaurantId = `restaurant-${crypto.randomUUID()}`;
   eventManager.addEvent("click", `#${restaurantId}`, () => {
     openModal();
   });
-  const handleFavoriteToggle = () => {
-    setFavorite(!favorite);
-    const storedRestaurants = getStorage() || [];
-    const updatedRestaurants = storedRestaurants.map(
-      (restaurant) => restaurant.name === name ? { ...restaurant, isFavorite: !favorite } : restaurant
-    );
-    saveStorage(updatedRestaurants);
-  };
   eventManager.addEvent("click", `#${buttonId}`, () => {
-    handleFavoriteToggle();
+    handleFavoriteToggle(name, favorite, setFavorite);
   });
   return `
     <li class="restaurant">
@@ -493,8 +502,11 @@ const Restaurant = (props) => {
     onClose: () => {
       closeModal();
     },
-    handleFavoriteToggle,
-    buttonId
+    handleFavoriteToggle: () => {
+      handleFavoriteToggle(name, favorite, setFavorite);
+    },
+    buttonId,
+    setFavorite
   }) : ""}
   `;
 };
@@ -581,16 +593,16 @@ const SortingSelect = (props) => {
     })
   });
 };
-const FilterSection = ({ onFilterChange }) => {
+const FilterSection = ({ setFilterOptions }) => {
   const [category, setCategory] = useState("전체");
   const [sorting, setSorting] = useState("name");
   const handleCategoryChange = (newCategory) => {
     setCategory(newCategory);
-    onFilterChange({ category: newCategory, sorting });
+    setFilterOptions({ category: newCategory, sorting });
   };
   const handleSortChange = (newSorting) => {
     setSorting(newSorting);
-    onFilterChange({ category, sorting: newSorting });
+    setFilterOptions({ category, sorting: newSorting });
   };
   return `
     <section class="restaurant-filter-container">
@@ -616,21 +628,20 @@ function App() {
     filterOptions.category,
     filterOptions.sorting
   );
-  const filteredRestaurants = getFilteredRestaurants();
   return `
     <div>
       ${Header()}
-      ${NavTab({ onTabChange: setCurrentTab })}
+      ${NavTab({ setCurrentTab })}
       ${currentTab === TAB.ALL ? `
             ${FilterSection({
-    onFilterChange: setFilterOptions
+    setFilterOptions
   })}
             ${RestaurantList({
-    restaurants: filteredRestaurants ?? []
+    restaurants: getFilteredRestaurants() ?? []
   })}
           ` : `
             ${RestaurantList({
-    restaurants: ((_a = getStorage()) == null ? void 0 : _a.filter((r) => r.isFavorite)) ?? []
+    restaurants: ((_a = getStorage()) == null ? void 0 : _a.filter((restaurant) => restaurant.isFavorite)) ?? []
   })}
           `}
     </div>
