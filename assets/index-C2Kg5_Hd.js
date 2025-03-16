@@ -80,6 +80,133 @@ function Core() {
   return { useState: useState2, render: render2 };
 }
 const { useState, render } = Core();
+function $(selector, scope = document) {
+  return scope.querySelector(selector);
+}
+function $$(selector, scope = document) {
+  if (!selector) throw new Error("Selector is not selected");
+  return scope.querySelectorAll(selector);
+}
+const parseAttribute = (attribute) => {
+  return Object.entries(attribute).map(
+    ([key, value]) => typeof value === "boolean" ? value === true ? `${key}` : "" : `${key}="${value}"`
+  ).join(" ");
+};
+function Select(props) {
+  const { attribute, children } = props;
+  return `
+    <select ${parseAttribute(attribute)}>
+      ${children}
+    </select>
+  `;
+}
+function Option(props) {
+  const { options, selectedValue } = props;
+  return `
+    ${options.map(
+    (option) => `
+        <option value="${option.value}" ${option.value === selectedValue ? "selected" : ""}>${option.label}</option>
+      `
+  ).join("")}
+  `;
+}
+Select.Option = Option;
+class EventManager {
+  constructor(element) {
+    __publicField(this, "element");
+    this.element = element;
+  }
+  addEvent(eventType, selector, callback) {
+    const children = [...$$(selector, this.element)];
+    const isTarget = (element) => children.includes(element) || element.closest(selector);
+    this.element.addEventListener(eventType, (event) => {
+      if (isTarget(event.target)) callback(event);
+    });
+  }
+}
+const CATEGORIES = [
+  { value: "전체", label: "전체" },
+  { value: "한식", label: "한식" },
+  { value: "중식", label: "중식" },
+  { value: "일식", label: "일식" },
+  { value: "양식", label: "양식" },
+  { value: "아시안", label: "아시안" },
+  { value: "기타", label: "기타" }
+];
+const DISTANCE_OPTIONS = [
+  { value: "5", label: "5분 내" },
+  { value: "10", label: "10분 내" },
+  { value: "15", label: "15분 내" },
+  { value: "20", label: "20분 내" },
+  { value: "30", label: "30분 내" }
+];
+const CategorySelect = (props) => {
+  const { handleCategoryChange, category } = props;
+  const eventManager = new EventManager($("#app"));
+  eventManager.addEvent("change", "#category-filter", (e) => {
+    const target = e.target;
+    handleCategoryChange(target.value);
+  });
+  return Select({
+    attribute: {
+      id: "category-filter",
+      class: "restaurant-filter",
+      name: "category",
+      value: category
+    },
+    children: Select.Option({
+      options: CATEGORIES,
+      selectedValue: category
+    })
+  });
+};
+const SORTING_OPTIONS = [
+  { value: "name", label: "이름순" },
+  { value: "distance", label: "거리순" }
+];
+const SortingSelect = (props) => {
+  const { handleSortChange, sorting } = props;
+  const eventManager = new EventManager($("#app"));
+  eventManager.addEvent("change", "#sorting-filter", (e) => {
+    const target = e.target;
+    handleSortChange(target.value);
+  });
+  return Select({
+    attribute: {
+      id: "sorting-filter",
+      class: "restaurant-filter",
+      name: "sorting"
+    },
+    children: Select.Option({
+      options: SORTING_OPTIONS,
+      selectedValue: sorting
+    })
+  });
+};
+const FilterSection = ({ setFilterOptions }) => {
+  const [category, setCategory] = useState("전체");
+  const [sorting, setSorting] = useState("name");
+  const handleCategoryChange = (newCategory) => {
+    setCategory(newCategory);
+    setFilterOptions({ category: newCategory, sorting });
+  };
+  const handleSortChange = (newSorting) => {
+    setSorting(newSorting);
+    setFilterOptions({ category, sorting: newSorting });
+  };
+  return `
+    <section class="restaurant-filter-container">
+      ${CategorySelect({
+    handleCategoryChange,
+    category
+  })}
+      ${SortingSelect({
+    handleSortChange,
+    sorting
+  })}
+    </section>
+  `;
+};
 function useBoolean(initialValue) {
   const [value, setValue] = useState(initialValue);
   const setTrue = () => {
@@ -100,36 +227,12 @@ function useModal(initialValue) {
   };
   return [isOpen, open, close];
 }
-function $(selector, scope = document) {
-  return scope.querySelector(selector);
-}
-function $$(selector, scope = document) {
-  if (!selector) throw new Error("Selector is not selected");
-  return scope.querySelectorAll(selector);
-}
-const parseAttribute = (attribute) => {
-  return Object.entries(attribute).map(
-    ([key, value]) => typeof value === "boolean" ? value === true ? `${key}` : "" : `${key}="${value}"`
-  ).join(" ");
-};
-class EventManager {
-  constructor(element) {
-    __publicField(this, "element");
-    this.element = element;
-  }
-  addEvent(eventType, selector, callback) {
-    const children = [...$$(selector, this.element)];
-    const isTarget = (element) => children.includes(element) || element.closest(selector);
-    this.element.addEventListener(eventType, (event) => {
-      if (isTarget(event.target)) callback(event);
-    });
-  }
-}
-const Button = ({ children, attribute }) => {
+function Button(props) {
+  const { children, attribute } = props;
   return `
     <button ${attribute ? parseAttribute(attribute) : ""}>${children}</button>
   `;
-};
+}
 function Modal(props) {
   const { children, attribute } = props;
   return `
@@ -142,11 +245,161 @@ function Modal(props) {
 
   `;
 }
+const STORAGE_KEY = "restaurant";
+const ERROR_MESSAGE = Object.freeze({
+  SAVE_LOCAL_STORAGE: "로컬 스토리지에 데이터를 저장하는 중 오류가 발생했습니다.",
+  GET_LOCAL_STORAGE: "로컬 스토리지에 데이터를 가져오는 중 오류가 발생했습니다."
+});
+const saveStorage = (data) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.error(ERROR_MESSAGE.SAVE_LOCAL_STORAGE);
+  }
+};
+const getStorage = () => {
+  try {
+    const data = localStorage.getItem(STORAGE_KEY);
+    if (data) {
+      return JSON.parse(data);
+    }
+    return null;
+  } catch (error) {
+    console.error(ERROR_MESSAGE.GET_LOCAL_STORAGE);
+    return null;
+  }
+};
+function useRestaurantForm() {
+  const addRestaurant = (formData) => {
+    const existingRestaurants = getStorage() || [];
+    const newRestaurant = {
+      category: formData.get("category"),
+      name: formData.get("name"),
+      distance: formData.get("distance"),
+      description: formData.get("description"),
+      link: formData.get("link"),
+      isFavorite: false
+    };
+    const updatedRestaurants = [...existingRestaurants, newRestaurant];
+    saveStorage(updatedRestaurants);
+  };
+  return { addRestaurant };
+}
+function Input(props) {
+  const { attribute } = props;
+  return `
+    <input ${attribute ? parseAttribute(attribute) : ""} />
+  `;
+}
+function RestaurantForm(props) {
+  const { closeModal } = props;
+  const eventManager = new EventManager($("#app"));
+  const { addRestaurant } = useRestaurantForm();
+  eventManager.addEvent("submit", "form", (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    addRestaurant(formData);
+    closeModal();
+    window.location.reload();
+  });
+  return `
+    <form>
+      <div class="form-item form-item--required">
+        <label for="category" class="text-caption">카테고리</label>
+        ${Select({
+    attribute: {
+      id: "category",
+      class: "category-select",
+      name: "category",
+      required: true
+    },
+    children: Select.Option({
+      options: [{ value: "", label: "선택해 주세요" }, ...CATEGORIES],
+      selectedValue: ""
+    })
+  })}
+      </div>
+
+      <div class="form-item form-item--required">
+        <label for="name" class="text-caption">이름</label>
+        ${Input({
+    attribute: {
+      type: "text",
+      name: "name",
+      id: "name",
+      class: "form-item__input",
+      required: true
+    }
+  })}
+      </div>
+
+      <div class="form-item form-item--required">
+        <label for="distance" class="text-caption">거리(도보 이동 시간)</label>
+        ${Select({
+    attribute: {
+      id: "distance",
+      class: "distance-select",
+      name: "distance",
+      required: true
+    },
+    children: Select.Option({
+      options: [
+        { value: "", label: "선택해 주세요" },
+        ...DISTANCE_OPTIONS
+      ],
+      selectedValue: ""
+    })
+  })}
+      </div>
+
+      <div class="form-item">
+        <label for="description" class="text-caption">설명</label>
+        <textarea name="description" id="description" cols="30" rows="5"></textarea>
+        <span class="help-text text-caption">메뉴 등 추가 정보를 입력해 주세요.</span>
+      </div>
+
+      <div class="form-item">
+        <label for="link" class="text-caption">참고 링크</label>
+        ${Input({
+    attribute: {
+      type: "text",
+      name: "link",
+      id: "link",
+      class: "form-item__input"
+    }
+  })}
+        <span class="help-text text-caption">매장 정보를 확인할 수 있는 링크를 입력해 주세요.</span>
+      </div>
+
+      <div class="button-container">
+        ${Button({
+    children: "취소하기",
+    attribute: {
+      type: "button",
+      class: "button button--secondary text-caption",
+      id: "cancel-button"
+    }
+  })}
+        ${Button({
+    children: "추가하기",
+    attribute: {
+      type: "submit",
+      class: "button button--primary text-caption"
+    }
+  })}
+      </div>
+    </form>
+  `;
+}
 function Header() {
-  const [isModalOpen, openModal] = useModal(false);
+  const [isModalOpen, openModal, closeModal] = useModal(false);
   const eventManager = new EventManager($("#app"));
   eventManager.addEvent("click", ".gnb__button", () => {
     openModal();
+  });
+  eventManager.addEvent("click", "#cancel-button", () => {
+    closeModal();
   });
   return `
     <header class="gnb">
@@ -160,81 +413,14 @@ function Header() {
     }
   })}
     </header>
-    ${isModalOpen ? `
-      ${Modal({
-    children: `<h2 class="modal-title text-title">새로운 음식점</h2>
-          <form>
-            <!-- 카테고리 -->
-            <div class="form-item form-item--required">
-              <label for="category text-caption">카테고리</label>
-              <select name="category" id="category" required>
-                <option value="">선택해 주세요</option>
-                <option value="한식">한식</option>
-                <option value="중식">중식</option>
-                <option value="일식">일식</option>
-                <option value="양식">양식</option>
-                <option value="아시안">아시안</option>
-                <option value="기타">기타</option>
-              </select>
-            </div>
-
-            <!-- 음식점 이름 -->
-            <div class="form-item form-item--required">
-              <label for="name text-caption">이름</label>
-              <input type="text" name="name" id="name" required />
-            </div>
-
-            <!-- 거리 -->
-            <div class="form-item form-item--required">
-              <label for="distance text-caption">거리(도보 이동 시간) </label>
-              <select name="distance" id="distance" required>
-                <option value="">선택해 주세요</option>
-                <option value="5">5분 내</option>
-                <option value="10">10분 내</option>
-                <option value="15">15분 내</option>
-                <option value="20">20분 내</option>
-                <option value="30">30분 내</option>
-              </select>
-            </div>
-
-            <!-- 설명 -->
-            <div class="form-item">
-              <label for="description text-caption">설명</label>
-              <textarea
-                name="description"
-                id="description"
-                cols="30"
-                rows="5"
-              ></textarea>
-              <span class="help-text text-caption"
-                >메뉴 등 추가 정보를 입력해 주세요.</span
-              >
-            </div>
-
-            <!-- 링크 -->
-            <div class="form-item">
-              <label for="link text-caption">참고 링크</label>
-              <input type="text" name="link" id="link" />
-              <span class="help-text text-caption"
-                >매장 정보를 확인할 수 있는 링크를 입력해 주세요.</span
-              >
-            </div>
-
-            <!-- 취소/추가 버튼 -->
-            <div class="button-container">
-              <button
-                type="button"
-                class="button button--secondary text-caption"
-              >
-                취소하기
-              </button>
-              <button class="button button--primary text-caption">
-                추가하기
-              </button>
-            </div>
-          </form>`
-  })}
-      ` : ""}
+    ${isModalOpen ? Modal({
+    children: `
+              <h2 class="modal-title text-title">새로운 음식점</h2>
+              ${RestaurantForm({
+      closeModal
+    })}
+            `
+  }) : ""}
   `;
 }
 const TAB = Object.freeze({
@@ -284,42 +470,6 @@ function NavTab({ setCurrentTab }) {
     </nav>
   `;
 }
-const STORAGE_KEY = "restaurant";
-const ERROR_MESSAGE = Object.freeze({
-  SAVE_LOCAL_STORAGE: "로컬 스토리지에 데이터를 저장하는 중 오류가 발생했습니다.",
-  GET_LOCAL_STORAGE: "로컬 스토리지에 데이터를 가져오는 중 오류가 발생했습니다."
-});
-const saveStorage = (data) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch (error) {
-    console.error(ERROR_MESSAGE.SAVE_LOCAL_STORAGE);
-  }
-};
-const getStorage = () => {
-  try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data && JSON.parse(data);
-  } catch (error) {
-    console.error(ERROR_MESSAGE.GET_LOCAL_STORAGE);
-    return null;
-  }
-};
-const useRestaurants = (category, sorting) => {
-  const getFilteredRestaurants = () => {
-    var _a;
-    let filtered = category === "전체" ? getStorage() : (_a = getStorage()) == null ? void 0 : _a.filter(
-      (restaurant) => restaurant.category === category
-    );
-    return filtered == null ? void 0 : filtered.sort((a, b) => {
-      if (sorting === "name") {
-        return a.name.localeCompare(b.name);
-      }
-      return a.distance - b.distance;
-    });
-  };
-  return { getFilteredRestaurants };
-};
 const CATEGORY_IMAGES = {
   전체: "",
   한식: "./category-korean.png",
@@ -334,9 +484,9 @@ const ICON_IMAGES = {
   UNFAVORITE: "./Ic_favorite_lined.png"
 };
 const useFavorite = () => {
-  const handleFavoriteToggle = (name, favorite, setFavorite) => {
+  const handleFavoriteToggle = (name, isFavorite, setFavorite) => {
     const storedRestaurants = getStorage() || [];
-    const newFavoriteState = !favorite;
+    const newFavoriteState = !isFavorite;
     const updatedRestaurants = storedRestaurants.map(
       (restaurant) => restaurant.name === name ? { ...restaurant, isFavorite: newFavoriteState } : restaurant
     );
@@ -447,8 +597,8 @@ const BottomSheet = (props) => {
   `;
 };
 const Restaurant = (props) => {
-  const { category, name, distance, description, link } = props;
-  const [favorite, setFavorite] = useState(false);
+  const { category, name, distance, description, link, isFavorite } = props;
+  const [favorite, setFavorite] = useState(isFavorite);
   const [isBottomSheetOpen, openBottomSheet, closeBottomSheet] = useModal(false);
   const { handleFavoriteToggle } = useFavorite();
   const eventManager = new EventManager($("#app"));
@@ -458,7 +608,7 @@ const Restaurant = (props) => {
     openBottomSheet();
   });
   eventManager.addEvent("click", `#${buttonId}`, () => {
-    handleFavoriteToggle(name, favorite, setFavorite);
+    handleFavoriteToggle(name, isFavorite, setFavorite);
   });
   return `
     <li class="restaurant">
@@ -521,100 +671,20 @@ const RestaurantList = (props) => {
     </ul>
   `;
 };
-function Select(props) {
-  const { attribute, children } = props;
-  return `
-    <select ${parseAttribute(attribute)}>
-      ${children}
-    </select>
-  `;
-}
-function Option(props) {
-  const { options, selectedValue } = props;
-  return `
-    ${options.map(
-    (option) => `
-        <option value="${option.value}" ${option.value === selectedValue ? "selected" : ""}>${option.label}</option>
-      `
-  ).join("")}
-  `;
-}
-Select.Option = Option;
-const CATEGORIES = [
-  { value: "전체", label: "전체" },
-  { value: "한식", label: "한식" },
-  { value: "중식", label: "중식" },
-  { value: "일식", label: "일식" },
-  { value: "양식", label: "양식" },
-  { value: "아시안", label: "아시안" },
-  { value: "기타", label: "기타" }
-];
-const CategorySelect = (props) => {
-  const { handleCategoryChange, category } = props;
-  const eventManager = new EventManager($("#app"));
-  eventManager.addEvent("change", "#category-filter", (e) => {
-    const target = e.target;
-    handleCategoryChange(target.value);
-  });
-  return Select({
-    attribute: {
-      id: "category-filter",
-      class: "restaurant-filter",
-      name: "category",
-      value: category
-    },
-    children: Select.Option({
-      options: CATEGORIES,
-      selectedValue: category
-    })
-  });
-};
-const SORTING_OPTIONS = [
-  { value: "name", label: "이름순" },
-  { value: "distance", label: "거리순" }
-];
-const SortingSelect = (props) => {
-  const { handleSortChange, sorting } = props;
-  const eventManager = new EventManager($("#app"));
-  eventManager.addEvent("change", "#sorting-filter", (e) => {
-    const target = e.target;
-    handleSortChange(target.value);
-  });
-  return Select({
-    attribute: {
-      id: "sorting-filter",
-      class: "restaurant-filter",
-      name: "sorting"
-    },
-    children: Select.Option({
-      options: SORTING_OPTIONS,
-      selectedValue: sorting
-    })
-  });
-};
-const FilterSection = ({ setFilterOptions }) => {
-  const [category, setCategory] = useState("전체");
-  const [sorting, setSorting] = useState("name");
-  const handleCategoryChange = (newCategory) => {
-    setCategory(newCategory);
-    setFilterOptions({ category: newCategory, sorting });
+const useRestaurants = (category, sorting) => {
+  const getFilteredRestaurants = () => {
+    var _a;
+    let filtered = category === "전체" ? getStorage() : (_a = getStorage()) == null ? void 0 : _a.filter(
+      (restaurant) => restaurant.category === category
+    );
+    return filtered == null ? void 0 : filtered.sort((a, b) => {
+      if (sorting === "name") {
+        return a.name.localeCompare(b.name);
+      }
+      return a.distance - b.distance;
+    });
   };
-  const handleSortChange = (newSorting) => {
-    setSorting(newSorting);
-    setFilterOptions({ category, sorting: newSorting });
-  };
-  return `
-    <section class="restaurant-filter-container">
-      ${CategorySelect({
-    handleCategoryChange,
-    category
-  })}
-      ${SortingSelect({
-    handleSortChange,
-    sorting
-  })}
-    </section>
-  `;
+  return { getFilteredRestaurants };
 };
 function App() {
   var _a;
