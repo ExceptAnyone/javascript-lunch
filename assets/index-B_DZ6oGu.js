@@ -245,11 +245,9 @@ function useTab(initialTab) {
   const [tab, setTab] = useState(initialTab);
   const setTabAll = () => {
     setTab(TAB.ALL);
-    console.log("setTabAll");
   };
   const setTabFavorite = () => {
     setTab(TAB.FAVORITE);
-    console.log("setTabFavorite");
   };
   return [tab, setTabAll, setTabFavorite];
 }
@@ -267,7 +265,8 @@ function NavTab({ setCurrentTab }) {
     handleTabChange(TAB.ALL);
     setCurrentTab(TAB.ALL);
   });
-  eventManager.addEvent("click", "#nav-tab-2", () => {
+  eventManager.addEvent("click", "#nav-tab-2", (e) => {
+    e.stopPropagation();
     handleTabChange(TAB.FAVORITE);
     setCurrentTab(TAB.FAVORITE);
   });
@@ -422,7 +421,7 @@ const BottomSheet = (props) => {
         </div>
         <div class="bottom-sheet-restaurant-link-container">
           <a href="${link}" class="bottom-sheet-restaurant__link">
-            ${link}
+            ${link || ""}
           </a>
         </div>
         <div class="bottom-sheet-restaurant-button-container">
@@ -450,13 +449,13 @@ const BottomSheet = (props) => {
 const Restaurant = (props) => {
   const { category, name, distance, description, link } = props;
   const [favorite, setFavorite] = useState(false);
-  const [isModalOpen, openModal, closeModal] = useModal(false);
+  const [isBottomSheetOpen, openBottomSheet, closeBottomSheet] = useModal(false);
   const { handleFavoriteToggle } = useFavorite();
   const eventManager = new EventManager($("#app"));
   const buttonId = `favorite-${crypto.randomUUID()}`;
   const restaurantId = `restaurant-${crypto.randomUUID()}`;
   eventManager.addEvent("click", `#${restaurantId}`, () => {
-    openModal();
+    openBottomSheet();
   });
   eventManager.addEvent("click", `#${buttonId}`, () => {
     handleFavoriteToggle(name, favorite, setFavorite);
@@ -492,7 +491,7 @@ const Restaurant = (props) => {
     children: `<img src="${favorite ? ICON_IMAGES.FAVORITE : ICON_IMAGES.UNFAVORITE}" alt="favorite" />`
   })}
     </li>
-    ${isModalOpen ? BottomSheet({
+    ${isBottomSheetOpen ? BottomSheet({
     favorite,
     category,
     name,
@@ -500,7 +499,7 @@ const Restaurant = (props) => {
     description,
     link,
     onClose: () => {
-      closeModal();
+      closeBottomSheet();
     },
     handleFavoriteToggle: () => {
       handleFavoriteToggle(name, favorite, setFavorite);
@@ -681,7 +680,7 @@ const RESTAURANT_INFO = [
     name: "호아빈 삼성점",
     distance: 15,
     description: "푸짐한 양에 국물이 일품인 쌀국수",
-    isFavorite: false
+    isFavorite: true
   },
   {
     category: "기타",
